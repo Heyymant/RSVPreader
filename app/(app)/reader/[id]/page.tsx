@@ -15,7 +15,7 @@ export default async function ReaderPage({
 
   const { data } = await supabase
     .from("documents")
-    .select("id, title, num_pages, pages")
+    .select("id, title, num_pages, pages, chapters")
     .eq("id", id)
     .maybeSingle();
 
@@ -25,7 +25,7 @@ export default async function ReaderPage({
 
   const doc = data as Pick<
     DocumentRow,
-    "id" | "title" | "num_pages" | "pages"
+    "id" | "title" | "num_pages" | "pages" | "chapters"
   >;
 
   return (
@@ -34,6 +34,7 @@ export default async function ReaderPage({
       title={doc.title}
       pages={doc.pages ?? []}
       numPages={doc.num_pages}
+      chapters={doc.chapters ?? []}
     />
   );
 }

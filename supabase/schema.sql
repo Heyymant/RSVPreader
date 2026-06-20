@@ -12,8 +12,13 @@ create table if not exists public.documents (
   storage_path text not null,
   num_pages    integer not null default 0,
   pages        jsonb not null default '[]'::jsonb,
+  chapters     jsonb not null default '[]'::jsonb,
   created_at   timestamptz not null default now()
 );
+
+-- If you created the table before chapters existed, add the column:
+alter table public.documents
+  add column if not exists chapters jsonb not null default '[]'::jsonb;
 
 create index if not exists documents_user_id_idx
   on public.documents (user_id, created_at desc);

@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { extractPdfText } from "@/lib/pdf";
+import { extractPdf } from "@/lib/pdf";
 
 type Status = "idle" | "extracting" | "uploading" | "saving" | "error";
 
@@ -24,7 +24,7 @@ export default function UploadDropzone() {
     try {
       setMessage(null);
       setStatus("extracting");
-      const pages = await extractPdfText(file);
+      const { pages, chapters } = await extractPdf(file);
 
       const hasText = pages.some((p) => p.trim().length > 0);
       if (!hasText) {
@@ -65,6 +65,7 @@ export default function UploadDropzone() {
         storage_path: storagePath,
         num_pages: pages.length,
         pages,
+        chapters,
       });
       if (insertError) throw insertError;
 

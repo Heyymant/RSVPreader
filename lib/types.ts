@@ -1,3 +1,5 @@
+import type { Chapter } from "@/lib/chapters";
+
 export interface DocumentRow {
   id: string;
   user_id: string;
@@ -5,6 +7,7 @@ export interface DocumentRow {
   storage_path: string;
   num_pages: number;
   pages: string[];
+  chapters: Chapter[];
   created_at: string;
 }
 
