@@ -27,7 +27,26 @@ export default function Reader({
   const [wpm, setWpm] = useState(DEFAULT_WPM);
   const [playing, setPlaying] = useState(false);
 
-  const tokens = useMemo(() => tokenize(pages[page] ?? ""), [pages, page]);
+  // Clean + tokenize every page once so we can skip pages that are pure
+  // front-matter (cover, copyright) and find where the real reading starts.
+  const pageTokens = useMemo(() => pages.map((p) => tokenize(p)), [pages]);
+
+  const firstReadingPage = useMemo(() => {
+    const idx = pageTokens.findIndex((t) => t.length > 0);
+    return idx === -1 ? 0 : idx;
+  }, [pageTokens]);
+
+  const nextReadingPage = useCallback(
+    (from: number) => {
+      for (let i = from + 1; i < pageTokens.length; i++) {
+        if (pageTokens[i].length > 0) return i;
+      }
+      return -1;
+    },
+    [pageTokens]
+  );
+
+  const tokens = pageTokens[page] ?? [];
   const totalWords = tokens.length;
   const currentToken = tokens[wordIndex] ?? null;
 
@@ -42,13 +61,16 @@ export default function Reader({
         setPage(p);
         setWordIndex(Math.max(0, progress.current_word_index));
         if (progress.wpm) setWpm(progress.wpm);
+      } else {
+        // New book: skip front-matter and begin on the first page of text.
+        setPage(firstReadingPage);
       }
       setReady(true);
     })();
     return () => {
       cancelled = true;
     };
-  }, [documentId, numPages]);
+  }, [documentId, numPages, firstReadingPage]);
 
   // Playback loop: schedule the next word based on WPM and per-word weighting.
   useEffect(() => {
@@ -63,11 +85,15 @@ export default function Reader({
     const timer = setTimeout(() => {
       if (wordIndex + 1 < totalWords) {
         setWordIndex(wordIndex + 1);
-      } else if (page < numPages - 1) {
-        setPage(page + 1);
-        setWordIndex(0);
       } else {
-        setPlaying(false);
+        // Jump to the next page that actually has readable text.
+        const next = nextReadingPage(page);
+        if (next !== -1) {
+          setPage(next);
+          setWordIndex(0);
+        } else {
+          setPlaying(false);
+        }
       }
     }, delay);
 
@@ -79,8 +105,8 @@ export default function Reader({
     page,
     wpm,
     totalWords,
-    numPages,
     currentToken,
+    nextReadingPage,
   ]);
 
   // Debounced autosave whenever position/speed changes.
@@ -182,7 +208,7 @@ export default function Reader({
           </p>
         ) : (
           <>
-            <div className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-8">
+            <div className="paper w-full rounded-2xl border border-[var(--border)] px-4 py-10">
               <Rsvp token={currentToken} />
             </div>
             <ContextLine tokens={tokens} index={wordIndex} />
@@ -191,7 +217,7 @@ export default function Reader({
       </div>
 
       {/* Controls */}
-      <div className="mt-6 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+      <div className="paper mt-6 rounded-2xl border border-[var(--border)] p-4">
         <Controls
           playing={playing}
           onTogglePlay={togglePlay}

@@ -1,5 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
+const MIN_WPM = 30;
+const MAX_WPM = 1500;
+
 export default function Controls({
   playing,
   onTogglePlay,
@@ -26,6 +31,23 @@ export default function Controls({
   onRestartPage: () => void;
 }) {
   const progress = totalWords > 0 ? (wordIndex + 1) / totalWords : 0;
+
+  // Local text state lets the user freely type a speed; we clamp on commit.
+  const [wpmText, setWpmText] = useState(String(wpm));
+  useEffect(() => {
+    setWpmText(String(wpm));
+  }, [wpm]);
+
+  function commitWpm(raw: string) {
+    const n = Math.round(Number(raw));
+    if (!Number.isFinite(n) || n <= 0) {
+      setWpmText(String(wpm));
+      return;
+    }
+    const clamped = Math.min(MAX_WPM, Math.max(MIN_WPM, n));
+    onWpmChange(clamped);
+    setWpmText(String(clamped));
+  }
 
   return (
     <div className="w-full space-y-4">
@@ -101,14 +123,36 @@ export default function Controls({
             min={100}
             max={900}
             step={25}
-            value={wpm}
+            value={Math.min(900, Math.max(100, wpm))}
             onChange={(e) => onWpmChange(Number(e.target.value))}
             className="flex-1 accent-[var(--accent)]"
-            aria-label="Words per minute"
+            aria-label="Reading speed slider"
           />
-          <span className="w-20 text-right text-sm tabular-nums">
-            {wpm} wpm
-          </span>
+          <div className="flex items-center gap-1">
+            <input
+              type="number"
+              min={MIN_WPM}
+              max={MAX_WPM}
+              value={wpmText}
+              onChange={(e) => {
+                setWpmText(e.target.value);
+                const n = Number(e.target.value);
+                if (Number.isFinite(n) && n >= MIN_WPM && n <= MAX_WPM) {
+                  onWpmChange(Math.round(n));
+                }
+              }}
+              onBlur={(e) => commitWpm(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  commitWpm((e.target as HTMLInputElement).value);
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              className="w-16 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1 text-right text-sm tabular-nums outline-none focus:border-[var(--accent-2)]"
+              aria-label="Words per minute"
+            />
+            <span className="text-sm text-[var(--muted)]">wpm</span>
+          </div>
         </div>
 
         <div className="flex items-center gap-3">

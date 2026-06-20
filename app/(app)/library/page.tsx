@@ -35,7 +35,7 @@ export default async function LibraryPage() {
           documents.map((doc) => (
             <div
               key={doc.id}
-              className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 transition hover:border-[var(--accent-2)]"
+              className="paper flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] px-4 py-3 transition hover:border-[var(--accent-2)]"
             >
               <Link href={`/reader/${doc.id}`} className="min-w-0 flex-1">
                 <p className="truncate font-medium">{doc.title}</p>

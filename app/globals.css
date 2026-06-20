@@ -17,14 +17,18 @@
 }
 
 :root {
-  --background: #0b0d12;
-  --surface: #151922;
-  --surface-2: #1d2230;
-  --border: #2a3142;
-  --foreground: #e6e9ef;
-  --muted: #8b93a7;
-  --accent: #ff5c5c;
-  --accent-2: #5c9dff;
+  /* Warm "paper + ink" palette so the app reads like a printed book. */
+  --background: #e3d8bf; /* desk / page edge */
+  --surface: #f6efda; /* the page */
+  --surface-2: #efe6cd; /* inputs */
+  --border: #d8c9a6;
+  --foreground: #2f2820; /* ink */
+  --muted: #877b5e; /* faded ink */
+  --accent: #b23b2e; /* pivot red ink */
+  --accent-2: #7a5a33; /* leather brown */
+
+  /* Subtle fractal-noise grain reused across paper surfaces. */
+  --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)' opacity='0.045'/%3E%3C/svg%3E");
 }
 
 html,
@@ -34,10 +38,17 @@ body {
 }
 
 body {
-  background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-mono), "0xProto Nerd Font", ui-monospace, monospace;
+  font-family: "0xProto Nerd Font", ui-monospace, monospace;
   -webkit-font-smoothing: antialiased;
+  /* Textured paper background with a soft warm vignette. */
+  background-color: var(--background);
+  background-image: var(--paper-grain),
+    radial-gradient(
+      120% 120% at 50% 0%,
+      rgba(255, 250, 235, 0.55) 0%,
+      rgba(227, 216, 191, 0) 60%
+    );
 }
 
 * {
@@ -46,6 +57,15 @@ body {
 
 .font-reader {
   font-family: "0xProto Nerd Font", ui-monospace, monospace;
+}
+
+/* A sheet of paper: cream surface, grain, and a soft drop shadow like a page. */
+.paper {
+  background-color: var(--surface);
+  background-image: var(--paper-grain);
+  box-shadow:
+    0 1px 2px rgba(47, 40, 32, 0.08),
+    0 12px 30px rgba(70, 52, 24, 0.12);
 }
 
 /* Hide scrollbars on the reader for a clean look */
