@@ -12,7 +12,10 @@ export interface Token {
  */
 export function tokenize(text: string): Token[] {
   const cleaned = cleanReadingText(text);
-  const raw = cleaned.split(/\s+/u).filter(isReadableWord);
+  const raw = cleaned
+    .split(/\s+/u)
+    .map(normalizeToken)
+    .filter(isReadableWord);
   return raw.map((w) => ({ text: w, pivot: orpIndex(w) }));
 }
 
@@ -41,7 +44,22 @@ const JUNK_LINE_PATTERNS: RegExp[] = [
  * that strongly look like metadata or decoration are removed.
  */
 export function cleanReadingText(text: string): string {
-  const lines = text.split("\n");
+  // Common PDF ligatures and punctuation variants -> plain readable forms.
+  const normalizedInput = text
+    .replace(/\uFB00/g, "ff")
+    .replace(/\uFB01/g, "fi")
+    .replace(/\uFB02/g, "fl")
+    .replace(/\uFB03/g, "ffi")
+    .replace(/\uFB04/g, "ffl")
+    .replace(/[\u2018\u2019\u2032]/g, "'")
+    .replace(/[\u201C\u201D\u2033]/g, '"')
+    .replace(/[\u2013\u2014]/g, "—")
+    .replace(/\u2026/g, "...")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    // Re-join hyphenated line-break words: "read-\ning" -> "reading".
+    .replace(/(\p{L})-\s*\n\s*(\p{L})/gu, "$1$2");
+
+  const lines = normalizedInput.split("\n");
   const kept: string[] = [];
 
   for (const line of lines) {
@@ -57,7 +75,14 @@ export function cleanReadingText(text: string): string {
     kept.push(t);
   }
 
-  return kept.join(" ").replace(/[ \t]+/g, " ").trim();
+  return kept
+    .join(" ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\s+([,.;:!?])/g, "$1") // no space before punctuation
+    .replace(/([,.;:!?]){2,}/g, "$1") // collapse OCR punctuation spam
+    .replace(/\(\s+/g, "(")
+    .replace(/\s+\)/g, ")")
+    .trim();
 }
 
 /** Rejects empty/symbol-only tokens so the reader never flashes a lone glyph. */
@@ -65,6 +90,15 @@ function isReadableWord(word: string): boolean {
   if (word.length === 0) return false;
   // Must contain at least one letter or digit; pure punctuation is dropped.
   return /[\p{L}\p{N}]/u.test(word);
+}
+
+/** Light per-token cleanup for OCR/PDF artifacts without damaging prose. */
+function normalizeToken(word: string): string {
+  return word
+    .replace(/^[|_*~•▪◦·]+/u, "")
+    .replace(/[|_*~•▪◦·]+$/u, "")
+    .replace(/^[\u00A0]+|[\u00A0]+$/gu, "")
+    .trim();
 }
 
 /**
