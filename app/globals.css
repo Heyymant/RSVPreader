@@ -17,18 +17,18 @@
 }
 
 :root {
-  /* Warm "paper + ink" palette so the app reads like a printed book. */
-  --background: #e3d8bf; /* desk / page edge */
-  --surface: #f6efda; /* the page */
-  --surface-2: #efe6cd; /* inputs */
-  --border: #d8c9a6;
-  --foreground: #2f2820; /* ink */
-  --muted: #877b5e; /* faded ink */
-  --accent: #b23b2e; /* pivot red ink */
-  --accent-2: #7a5a33; /* leather brown */
+  /* Low-strain dark palette tuned for long reading sessions. */
+  --background: #0f1218; /* app backdrop */
+  --surface: #171c25; /* primary card/reader surface */
+  --surface-2: #202736; /* controls/inputs */
+  --border: #2c3548;
+  --foreground: #d7deea; /* soft off-white, not pure white */
+  --muted: #97a2b8;
+  --accent: #e78984; /* pivot highlight */
+  --accent-2: #7aa2f7; /* primary action */
 
-  /* Subtle fractal-noise grain reused across paper surfaces. */
-  --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)' opacity='0.045'/%3E%3C/svg%3E");
+  /* Fine grain to keep panels from feeling flat and harsh. */
+  --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)' opacity='0.028'/%3E%3C/svg%3E");
 }
 
 html,
@@ -41,13 +41,14 @@ body {
   color: var(--foreground);
   font-family: "0xProto Nerd Font", ui-monospace, monospace;
   -webkit-font-smoothing: antialiased;
-  /* Textured paper background with a soft warm vignette. */
+  line-height: 1.5;
+  /* Dark vignette + subtle grain to reduce eye fatigue. */
   background-color: var(--background);
   background-image: var(--paper-grain),
     radial-gradient(
       120% 120% at 50% 0%,
-      rgba(255, 250, 235, 0.55) 0%,
-      rgba(227, 216, 191, 0) 60%
+      rgba(142, 170, 223, 0.12) 0%,
+      rgba(15, 18, 24, 0) 60%
     );
 }
 
@@ -59,13 +60,15 @@ body {
   font-family: "0xProto Nerd Font", ui-monospace, monospace;
 }
 
-/* A sheet of paper: cream surface, grain, and a soft drop shadow like a page. */
+/* Main reading panels */
 .paper {
   background-color: var(--surface);
   background-image: var(--paper-grain);
+  border: 1px solid var(--border);
   box-shadow:
-    0 1px 2px rgba(47, 40, 32, 0.08),
-    0 12px 30px rgba(70, 52, 24, 0.12);
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 14px 30px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 /* Hide scrollbars on the reader for a clean look */
