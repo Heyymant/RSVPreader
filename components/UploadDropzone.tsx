@@ -58,15 +58,26 @@ export default function UploadDropzone() {
 
       setStatus("saving");
       const title = file.name.replace(/\.pdf$/i, "");
-      const { error: insertError } = await supabase.from("documents").insert({
+      const base = {
         id,
         user_id: user.id,
         title,
         storage_path: storagePath,
         num_pages: pages.length,
         pages,
-        chapters,
-      });
+      };
+
+      let { error: insertError } = await supabase
+        .from("documents")
+        .insert({ ...base, chapters });
+
+      // If the `chapters` column hasn't been added yet, save without it.
+      if (insertError) {
+        console.error("Insert with chapters failed, retrying:", insertError);
+        ({ error: insertError } = await supabase
+          .from("documents")
+          .insert(base));
+      }
       if (insertError) throw insertError;
 
       setStatus("idle");
