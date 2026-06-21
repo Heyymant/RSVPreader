@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { Chapter } from "@/lib/chapters";
 
 const MIN_WPM = 30;
 const MAX_WPM = 1500;
@@ -17,6 +18,9 @@ export default function Controls({
   totalWords,
   onSeekWord,
   onRestartPage,
+  chapters,
+  currentChapterIdx,
+  onChapterChange,
 }: {
   playing: boolean;
   onTogglePlay: () => void;
@@ -29,6 +33,9 @@ export default function Controls({
   totalWords: number;
   onSeekWord: (index: number) => void;
   onRestartPage: () => void;
+  chapters: Chapter[];
+  currentChapterIdx: number;
+  onChapterChange: (idx: number) => void;
 }) {
   const progress = totalWords > 0 ? (wordIndex + 1) / totalWords : 0;
 
@@ -113,6 +120,29 @@ export default function Controls({
           Page ›
         </button>
       </div>
+
+      {/* chapter selector */}
+      {chapters.length > 0 && (
+        <div className="flex items-center gap-3">
+          <label className="shrink-0 text-xs text-[var(--muted)]">Chapter</label>
+          <select
+            value={currentChapterIdx}
+            onChange={(e) => onChapterChange(Number(e.target.value))}
+            className="min-w-0 flex-1 truncate rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-sm outline-none focus:border-[var(--accent-2)]"
+          >
+            {currentChapterIdx === -1 && (
+              <option value={-1} disabled>
+                (front matter)
+              </option>
+            )}
+            {chapters.map((c, i) => (
+              <option key={`${c.page}-${i}`} value={i}>
+                {c.title} — p. {c.page + 1}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* speed + page jump + restart */}
       <div className="flex flex-wrap items-center justify-between gap-4">

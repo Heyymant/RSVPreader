@@ -57,6 +57,19 @@ export default function Reader({
       .filter((c) => c.title.trim().length > 0);
   }, [chapters, pages, numPages]);
 
+  // The current chapter is the last one whose start page is at or before us.
+  const currentChapterIdx = useMemo(() => {
+    let idx = -1;
+    for (let i = 0; i < effectiveChapters.length; i++) {
+      if (effectiveChapters[i].page <= page) idx = i;
+      else break;
+    }
+    return idx;
+  }, [effectiveChapters, page]);
+
+  const currentChapter =
+    currentChapterIdx >= 0 ? effectiveChapters[currentChapterIdx] : null;
+
   const nextReadingPage = useCallback(
     (from: number) => {
       for (let i = from + 1; i < pageTokens.length; i++) {
@@ -181,6 +194,17 @@ export default function Reader({
     [startReading]
   );
 
+  // Jump between chapters while reading, preserving the play/pause state.
+  const jumpToChapter = useCallback(
+    (idx: number) => {
+      const ch = effectiveChapters[idx];
+      if (!ch) return;
+      setPage(Math.min(Math.max(0, ch.page), Math.max(0, numPages - 1)));
+      setWordIndex(0);
+    },
+    [effectiveChapters, numPages]
+  );
+
   const handleStartBeginning = useCallback(
     () => startReading(firstReadingPage, 0, true),
     [startReading, firstReadingPage]
@@ -277,6 +301,15 @@ export default function Reader({
         </div>
       ) : (
         <>
+          {/* Running chapter heading */}
+          {currentChapter && (
+            <div className="mb-1 border-b border-[var(--border)] pb-2 text-center">
+              <span className="font-reader text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">
+                {currentChapter.title}
+              </span>
+            </div>
+          )}
+
           {/* Reading stage */}
           <div className="flex flex-1 flex-col items-center justify-center gap-8">
             {totalWords === 0 ? (
@@ -307,6 +340,9 @@ export default function Reader({
               totalWords={totalWords}
               onSeekWord={seekWord}
               onRestartPage={restartPage}
+              chapters={effectiveChapters}
+              currentChapterIdx={currentChapterIdx}
+              onChapterChange={jumpToChapter}
             />
             <p className="mt-3 text-center text-xs text-[var(--muted)]">
               Space = play/pause · ← → = word · ↑ ↓ = speed
