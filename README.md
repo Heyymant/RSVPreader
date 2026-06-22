@@ -14,6 +14,7 @@ Built with **Next.js + Supabase**, deployable to **Vercel**, using the
 - One-word-at-a-time RSVP reader with ORP pivot highlighting
 - Context line that keeps the highlighted word centered
 - Upload your own PDFs (text extracted in the browser)
+- OCR fallback for scanned/image PDFs (client-side via Tesseract.js)
 - Adjustable speed (100-900 wpm), page navigation, seek within a page
 - Two reading modes: RSVP (word-by-word) and Paragraph mode
 - Theme selector: Dark / Night / Sepia
@@ -81,8 +82,8 @@ Open http://localhost:3000 and sign in with the account you created.
 
 ## Notes
 
-- **Scanned PDFs**: text extraction needs selectable text. Image-only/scanned
-  PDFs (no OCR) will be rejected on upload.
+- **Scanned PDFs**: the app attempts OCR fallback for image-only pages.
+  Very low-quality scans may still fail.
 - All data is scoped to your user via row-level security, and PDF files live in
   a private storage bucket keyed by your user id.
 

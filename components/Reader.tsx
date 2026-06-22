@@ -86,6 +86,10 @@ export default function Reader({
   const currentChapter =
     currentChapterIdx >= 0 ? effectiveChapters[currentChapterIdx] : null;
 
+  const cleanedTextForExport = useMemo(() => {
+    return cleanedPages.filter((p) => p.trim().length > 0).join("\n\n");
+  }, [cleanedPages]);
+
   const nextReadingPage = useCallback(
     (from: number) => {
       for (let i = from + 1; i < pageTokens.length; i++) {
@@ -254,6 +258,20 @@ export default function Reader({
     setView("contents");
   }, []);
 
+  const downloadTxt = useCallback(() => {
+    if (!cleanedTextForExport.trim()) return;
+    const blob = new Blob([cleanedTextForExport], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const safeTitle = title.replace(/[^\w\- ]+/g, "").trim() || "book";
+    a.href = url;
+    a.download = `${safeTitle}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [cleanedTextForExport, title]);
+
   const jumpToNextParagraph = useCallback(() => {
     if (paragraphIndex + 1 < paragraphs.length) {
       setParagraphIndex(paragraphIndex + 1);
@@ -340,18 +358,27 @@ export default function Reader({
         >
           ‹ Library
         </Link>
-        {view === "reading" ? (
+        <div className="flex items-center gap-2">
           <button
-            onClick={openContents}
+            onClick={downloadTxt}
             className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-sm text-[var(--muted)] transition hover:text-[var(--foreground)]"
+            title="Download cleaned text"
           >
-            Contents
+            Download TXT
           </button>
-        ) : (
-          <h1 className="truncate text-sm font-medium text-[var(--muted)]">
-            {title}
-          </h1>
-        )}
+          {view === "reading" ? (
+            <button
+              onClick={openContents}
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-sm text-[var(--muted)] transition hover:text-[var(--foreground)]"
+            >
+              Contents
+            </button>
+          ) : (
+            <h1 className="truncate text-sm font-medium text-[var(--muted)]">
+              {title}
+            </h1>
+          )}
+        </div>
       </div>
 
       {!ready ? (

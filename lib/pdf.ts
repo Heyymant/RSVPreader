@@ -47,6 +47,8 @@ export async function extractPdf(file: File): Promise<ExtractResult> {
     pages.push(normalizeWhitespace(text));
   }
 
+  const pagesWithOcr = await applyOcrFallback(doc, pages);
+
   let chapters: Chapter[] = [];
   try {
     chapters = await extractOutline(doc);
@@ -54,10 +56,10 @@ export async function extractPdf(file: File): Promise<ExtractResult> {
     chapters = [];
   }
   if (chapters.length === 0) {
-    chapters = detectChaptersFromText(pages);
+    chapters = detectChaptersFromText(pagesWithOcr);
   }
 
-  return { pages, chapters };
+  return { pages: pagesWithOcr, chapters };
 }
 
 interface OutlineItem {
@@ -124,4 +126,62 @@ function normalizeWhitespace(text: string): string {
     .replace(/ ?\n ?/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function needsOcr(pageText: string): boolean {
+  // If a page has very little alphanumeric content, it's likely scanned/image-only.
+  const alnumCount = (pageText.match(/[\p{L}\p{N}]/gu) ?? []).length;
+  return alnumCount < 30;
+}
+
+async function applyOcrFallback(
+  doc: PDFDocumentProxy,
+  pages: string[]
+): Promise<string[]> {
+  const ocrCandidates = pages
+    .map((p, idx) => (needsOcr(p) ? idx : -1))
+    .filter((idx) => idx >= 0);
+
+  if (ocrCandidates.length === 0) return pages;
+
+  const { createWorker } = await import("tesseract.js");
+  const worker = await createWorker("eng");
+  const output = [...pages];
+
+  try {
+    for (const idx of ocrCandidates) {
+      const ocrText = await ocrPdfPage(doc, idx + 1, worker);
+      const normalized = normalizeWhitespace(ocrText);
+      if (normalized.length > output[idx].length) {
+        output[idx] = normalized;
+      }
+    }
+  } catch {
+    // If OCR fails for any reason, fall back to existing extracted text.
+    return pages;
+  } finally {
+    await worker.terminate();
+  }
+
+  return output;
+}
+
+async function ocrPdfPage(
+  doc: PDFDocumentProxy,
+  pageNumber: number,
+  worker: Awaited<ReturnType<(typeof import("tesseract.js"))["createWorker"]>>
+): Promise<string> {
+  const page = await doc.getPage(pageNumber);
+  const viewport = page.getViewport({ scale: 2 });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  const result = await worker.recognize(canvas);
+  return result.data?.text ?? "";
 }

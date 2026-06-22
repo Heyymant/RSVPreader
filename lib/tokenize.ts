@@ -30,6 +30,10 @@ const JUNK_LINE_PATTERNS: RegExp[] = [
   /all rights reserved/i,
   /^copyright\b/i,
   /^©|^\(c\)\s/i,
+  /\btrademark\b/i,
+  /\bregistered trademark\b/i,
+  /\bu\.s\.\s*pat/i,
+  /\bforeign countries\b/i,
   /printed (?:and bound )?in\b/i,
   /first (?:published|edition|printing)/i,
   /\bpublished by\b/i,
@@ -83,6 +87,7 @@ export function cleanDocumentPages(pages: string[]): string[] {
 
   return normalizedPages.map((page) => {
     const lines = page.split("\n");
+    const pageLooksLikeContents = detectContentsPage(lines);
     const kept: string[] = [];
 
     for (const line of lines) {
@@ -94,6 +99,7 @@ export function cleanDocumentPages(pages: string[]): string[] {
 
       if (JUNK_LINE_PATTERNS.some((re) => re.test(t))) continue;
       if (isStandalonePageMarker(t)) continue;
+      if (pageLooksLikeContents && looksLikeContentsEntry(t)) continue;
 
       const fp = lineFingerprint(t);
       if (fp && repeatedEdgeLines.has(fp) && !looksLikeSectionHeading(t)) {
@@ -215,6 +221,39 @@ function looksLikeSectionHeading(line: string): boolean {
     /[A-Z]/.test(line) &&
     !/[.!?]$/.test(line)
   );
+}
+
+function detectContentsPage(lines: string[]): boolean {
+  const nonEmpty = lines.map((l) => l.trim()).filter(Boolean);
+  if (nonEmpty.length === 0) return false;
+
+  if (nonEmpty.some((l) => /^contents$/i.test(l))) return true;
+
+  const evidence = nonEmpty
+    .slice(0, 18)
+    .reduce((acc, l) => acc + (looksLikeContentsEntry(l) ? 1 : 0), 0);
+  return evidence >= 3;
+}
+
+function looksLikeContentsEntry(line: string): boolean {
+  const t = line.replace(/\s+/g, " ").trim();
+  if (!t) return false;
+
+  // "Chapter One ........ 12"
+  if (/^.{3,220}\.{2,}\s*\d{1,4}$/u.test(t)) return true;
+
+  // "Selected Bibliography 240"
+  if (/^[\p{L}"'(),:;.\- ]{3,220}\s+\d{1,4}$/u.test(t)) return true;
+
+  // OCR-packed ToC line: "Title 7 Another Title 62 ... 204"
+  if (countMatches(t, /\b\d{1,4}\b/g) >= 3 && t.length <= 260) return true;
+
+  return false;
+}
+
+function countMatches(input: string, re: RegExp): number {
+  const m = input.match(re);
+  return m ? m.length : 0;
 }
 
 /**

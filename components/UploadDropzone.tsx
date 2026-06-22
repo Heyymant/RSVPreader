@@ -35,7 +35,7 @@ export default function UploadDropzone() {
       if (!hasText) {
         setStatus("error");
         setMessage(
-          "No selectable text found. This PDF may be scanned images (OCR not supported)."
+          "No readable text found, even after OCR fallback. Try a clearer scan or a different PDF."
         );
         return;
       }
