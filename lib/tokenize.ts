@@ -5,6 +5,8 @@ export interface Token {
   pivot: number;
 }
 
+const EDGE_SCAN_LINES = 4;
+
 /**
  * Splits page text into a flat list of words suitable for RSVP playback.
  * The text is first cleaned of non-prose noise (page numbers, prices, ISBNs,
@@ -44,45 +46,101 @@ const JUNK_LINE_PATTERNS: RegExp[] = [
  * that strongly look like metadata or decoration are removed.
  */
 export function cleanReadingText(text: string): string {
-  // Common PDF ligatures and punctuation variants -> plain readable forms.
-  const normalizedInput = text
-    .replace(/\uFB00/g, "ff")
-    .replace(/\uFB01/g, "fi")
-    .replace(/\uFB02/g, "fl")
-    .replace(/\uFB03/g, "ffi")
-    .replace(/\uFB04/g, "ffl")
-    .replace(/[\u2018\u2019\u2032]/g, "'")
-    .replace(/[\u201C\u201D\u2033]/g, '"')
-    .replace(/[\u2013\u2014]/g, "—")
-    .replace(/\u2026/g, "...")
-    .replace(/[\u200B-\u200D\uFEFF]/g, "")
-    // Re-join hyphenated line-break words: "read-\ning" -> "reading".
-    .replace(/(\p{L})-\s*\n\s*(\p{L})/gu, "$1$2");
+  const page = cleanDocumentPages([text])[0] ?? "";
+  return page
+    .replace(/\n+/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .trim();
+}
 
-  const lines = normalizedInput.split("\n");
-  const kept: string[] = [];
+/** Cleans all pages together so repeated headers/footers can be removed. */
+export function cleanDocumentPages(pages: string[]): string[] {
+  if (pages.length === 0) return [];
 
-  for (const line of lines) {
-    const t = line.trim();
-    if (!t) continue;
-    if (JUNK_LINE_PATTERNS.some((re) => re.test(t))) continue;
+  const normalizedPages = pages.map((p) => normalizeInputText(p));
+  const edgeCandidates = new Map<string, number>();
 
-    // Drop lines that are mostly non-letters (e.g. tables of numbers, decoration)
-    // while keeping anything with a reasonable amount of words.
-    const letters = (t.match(/\p{L}/gu) ?? []).length;
-    if (letters < 2 && t.length > 0) continue;
-
-    kept.push(t);
+  for (const page of normalizedPages) {
+    const lines = page.split("\n").map((l) => l.trim()).filter(Boolean);
+    const perPage = new Set<string>();
+    const head = lines.slice(0, EDGE_SCAN_LINES);
+    const tail = lines.slice(-EDGE_SCAN_LINES);
+    for (const line of [...head, ...tail]) {
+      const key = lineFingerprint(line);
+      if (key) perPage.add(key);
+    }
+    for (const key of perPage) {
+      edgeCandidates.set(key, (edgeCandidates.get(key) ?? 0) + 1);
+    }
   }
 
-  return kept
-    .join(" ")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\s+([,.;:!?])/g, "$1") // no space before punctuation
-    .replace(/([,.;:!?]){2,}/g, "$1") // collapse OCR punctuation spam
-    .replace(/\(\s+/g, "(")
-    .replace(/\s+\)/g, ")")
-    .trim();
+  const repeatThreshold = Math.max(3, Math.ceil(normalizedPages.length * 0.25));
+  const repeatedEdgeLines = new Set(
+    [...edgeCandidates.entries()]
+      .filter(([, count]) => count >= repeatThreshold)
+      .map(([key]) => key)
+  );
+
+  return normalizedPages.map((page) => {
+    const lines = page.split("\n");
+    const kept: string[] = [];
+
+    for (const line of lines) {
+      const t = line.trim();
+      if (!t) {
+        if (kept.length > 0 && kept[kept.length - 1] !== "") kept.push("");
+        continue;
+      }
+
+      if (JUNK_LINE_PATTERNS.some((re) => re.test(t))) continue;
+      if (isStandalonePageMarker(t)) continue;
+
+      const fp = lineFingerprint(t);
+      if (fp && repeatedEdgeLines.has(fp) && !looksLikeSectionHeading(t)) {
+        continue;
+      }
+
+      // Drop lines that are mostly non-letters (e.g. tables of numbers).
+      const letters = (t.match(/\p{L}/gu) ?? []).length;
+      if (letters < 2 && t.length > 0) continue;
+
+      kept.push(t);
+    }
+
+    return normalizeCleanedText(kept.join("\n"));
+  });
+}
+
+/** Paragraph view helper: splits cleaned page text into readable chunks. */
+export function splitParagraphs(pageText: string): string[] {
+  const t = pageText.trim();
+  if (!t) return [];
+
+  const blocks = t
+    .split(/\n{2,}/)
+    .map((p) => p.replace(/\s*\n\s*/g, " ").replace(/[ \t]+/g, " ").trim())
+    .filter(Boolean);
+
+  if (blocks.length > 1) return blocks;
+
+  // Fallback for PDFs without blank lines: make sentence-group paragraphs.
+  const sentences = t.split(/(?<=[.!?])\s+/).filter(Boolean);
+  const grouped: string[] = [];
+  let current = "";
+  for (const s of sentences) {
+    if (!current) {
+      current = s;
+      continue;
+    }
+    if ((current + " " + s).length > 320) {
+      grouped.push(current.trim());
+      current = s;
+    } else {
+      current += " " + s;
+    }
+  }
+  if (current.trim()) grouped.push(current.trim());
+  return grouped.length > 0 ? grouped : [t];
 }
 
 /** Rejects empty/symbol-only tokens so the reader never flashes a lone glyph. */
@@ -99,6 +157,64 @@ function normalizeToken(word: string): string {
     .replace(/[|_*~•▪◦·]+$/u, "")
     .replace(/^[\u00A0]+|[\u00A0]+$/gu, "")
     .trim();
+}
+
+function normalizeInputText(text: string): string {
+  return text
+    .replace(/\uFB00/g, "ff")
+    .replace(/\uFB01/g, "fi")
+    .replace(/\uFB02/g, "fl")
+    .replace(/\uFB03/g, "ffi")
+    .replace(/\uFB04/g, "ffl")
+    .replace(/[\u2018\u2019\u2032]/g, "'")
+    .replace(/[\u201C\u201D\u2033]/g, '"')
+    .replace(/[\u2013\u2014]/g, "—")
+    .replace(/\u2026/g, "...")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    // Re-join hyphenated line-break words: "read-\ning" -> "reading".
+    .replace(/(\p{L})-\s*\n\s*(\p{L})/gu, "$1$2");
+}
+
+function normalizeCleanedText(text: string): string {
+  return text
+    .replace(/[ \t]+/g, " ")
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .replace(/([,.;:!?]){2,}/g, "$1")
+    .replace(/\(\s+/g, "(")
+    .replace(/\s+\)/g, ")")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function lineFingerprint(line: string): string {
+  const t = line
+    .toLowerCase()
+    .replace(/\d+/g, "#")
+    .replace(/[^\p{L}# ]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return t.length >= 4 ? t : "";
+}
+
+function isStandalonePageMarker(line: string): boolean {
+  const t = line.trim();
+  return (
+    /^[-–—]?\s*\d{1,4}\s*[-–—]?$/.test(t) ||
+    /^[-–—]?\s*[ivxlcdm]{1,9}\s*[-–—]?$/i.test(t) ||
+    /^page\s+\d+\s+of\s+\d+$/i.test(t)
+  );
+}
+
+function looksLikeSectionHeading(line: string): boolean {
+  if (/^(chapter|part|book|section|prologue|epilogue|appendix)\b/i.test(line)) {
+    return true;
+  }
+  return (
+    line.length <= 60 &&
+    line === line.toUpperCase() &&
+    /[A-Z]/.test(line) &&
+    !/[.!?]$/.test(line)
+  );
 }
 
 /**

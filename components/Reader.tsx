@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { tokenize, delayMultiplier } from "@/lib/tokenize";
+import {
+  cleanDocumentPages,
+  delayMultiplier,
+  splitParagraphs,
+  tokenize,
+} from "@/lib/tokenize";
 import { detectChaptersFromText, type Chapter } from "@/lib/chapters";
 import { loadProgress, saveProgress } from "@/lib/progress";
 import Rsvp from "@/components/Rsvp";
@@ -27,15 +32,26 @@ export default function Reader({
 }) {
   const [ready, setReady] = useState(false);
   const [view, setView] = useState<"contents" | "reading">("contents");
+  const [readingMode, setReadingMode] = useState<"rsvp" | "paragraph">("rsvp");
   const [hasProgress, setHasProgress] = useState(false);
   const [page, setPage] = useState(0);
   const [wordIndex, setWordIndex] = useState(0);
+  const [paragraphIndex, setParagraphIndex] = useState(0);
   const [wpm, setWpm] = useState(DEFAULT_WPM);
   const [playing, setPlaying] = useState(false);
 
-  // Clean + tokenize every page once so we can skip pages that are pure
-  // front-matter (cover, copyright) and find where the real reading starts.
-  const pageTokens = useMemo(() => pages.map((p) => tokenize(p)), [pages]);
+  // Document-level cleaning removes repeated headers/footers/page numbers.
+  const cleanedPages = useMemo(() => cleanDocumentPages(pages), [pages]);
+
+  // Token and paragraph indexes built from cleaned pages.
+  const pageTokens = useMemo(
+    () => cleanedPages.map((p) => tokenize(p)),
+    [cleanedPages]
+  );
+  const pageParagraphs = useMemo(
+    () => cleanedPages.map((p) => splitParagraphs(p)),
+    [cleanedPages]
+  );
 
   const firstReadingPage = useMemo(() => {
     const idx = pageTokens.findIndex((t) => t.length > 0);
@@ -48,14 +64,14 @@ export default function Reader({
     const source =
       chapters && chapters.length > 0
         ? chapters
-        : detectChaptersFromText(pages);
+        : detectChaptersFromText(cleanedPages);
     return source
       .map((c) => ({
         ...c,
         page: Math.min(Math.max(0, c.page), Math.max(0, numPages - 1)),
       }))
       .filter((c) => c.title.trim().length > 0);
-  }, [chapters, pages, numPages]);
+  }, [chapters, cleanedPages, numPages]);
 
   // The current chapter is the last one whose start page is at or before us.
   const currentChapterIdx = useMemo(() => {
@@ -73,14 +89,26 @@ export default function Reader({
   const nextReadingPage = useCallback(
     (from: number) => {
       for (let i = from + 1; i < pageTokens.length; i++) {
-        if (pageTokens[i].length > 0) return i;
+        if (pageTokens[i].length > 0 || pageParagraphs[i].length > 0) return i;
       }
       return -1;
     },
-    [pageTokens]
+    [pageTokens, pageParagraphs]
+  );
+
+  const prevReadingPage = useCallback(
+    (from: number) => {
+      for (let i = from - 1; i >= 0; i--) {
+        if (pageTokens[i].length > 0 || pageParagraphs[i].length > 0) return i;
+      }
+      return -1;
+    },
+    [pageTokens, pageParagraphs]
   );
 
   const tokens = pageTokens[page] ?? [];
+  const paragraphs = pageParagraphs[page] ?? [];
+  const currentParagraph = paragraphs[paragraphIndex] ?? "";
   const totalWords = tokens.length;
   const currentToken = tokens[wordIndex] ?? null;
 
@@ -107,7 +135,9 @@ export default function Reader({
 
   // Playback loop: schedule the next word based on WPM and per-word weighting.
   useEffect(() => {
-    if (!playing || !ready || view !== "reading") return;
+    if (!playing || !ready || view !== "reading" || readingMode !== "rsvp") {
+      return;
+    }
     if (totalWords === 0) {
       setPlaying(false);
       return;
@@ -135,6 +165,7 @@ export default function Reader({
     playing,
     ready,
     view,
+    readingMode,
     wordIndex,
     page,
     wpm,
@@ -162,6 +193,7 @@ export default function Reader({
       const clamped = Math.min(Math.max(0, next), numPages - 1);
       setPage(clamped);
       setWordIndex(0);
+      setParagraphIndex(0);
     },
     [numPages]
   );
@@ -183,6 +215,7 @@ export default function Reader({
     (targetPage: number, targetWord: number, autoplay: boolean) => {
       setPage(Math.min(Math.max(0, targetPage), Math.max(0, numPages - 1)));
       setWordIndex(Math.max(0, targetWord));
+      setParagraphIndex(0);
       setView("reading");
       setPlaying(autoplay);
     },
@@ -201,6 +234,7 @@ export default function Reader({
       if (!ch) return;
       setPage(Math.min(Math.max(0, ch.page), Math.max(0, numPages - 1)));
       setWordIndex(0);
+      setParagraphIndex(0);
     },
     [effectiveChapters, numPages]
   );
@@ -220,6 +254,33 @@ export default function Reader({
     setView("contents");
   }, []);
 
+  const jumpToNextParagraph = useCallback(() => {
+    if (paragraphIndex + 1 < paragraphs.length) {
+      setParagraphIndex(paragraphIndex + 1);
+      return;
+    }
+    const next = nextReadingPage(page);
+    if (next !== -1) {
+      setPage(next);
+      setWordIndex(0);
+      setParagraphIndex(0);
+    }
+  }, [paragraphIndex, paragraphs.length, nextReadingPage, page]);
+
+  const jumpToPrevParagraph = useCallback(() => {
+    if (paragraphIndex > 0) {
+      setParagraphIndex(paragraphIndex - 1);
+      return;
+    }
+    const prev = prevReadingPage(page);
+    if (prev !== -1) {
+      const prevParas = pageParagraphs[prev] ?? [];
+      setPage(prev);
+      setWordIndex(0);
+      setParagraphIndex(Math.max(0, prevParas.length - 1));
+    }
+  }, [paragraphIndex, prevReadingPage, page, pageParagraphs]);
+
   // Keyboard shortcuts (reading view only).
   useEffect(() => {
     if (view !== "reading") return;
@@ -236,29 +297,39 @@ export default function Reader({
       switch (e.key) {
         case " ":
           e.preventDefault();
-          togglePlay();
+          if (readingMode === "rsvp") togglePlay();
           break;
         case "ArrowLeft":
           e.preventDefault();
-          seekWord(wordIndex - 1);
+          if (readingMode === "rsvp") seekWord(wordIndex - 1);
+          else jumpToPrevParagraph();
           break;
         case "ArrowRight":
           e.preventDefault();
-          seekWord(wordIndex + 1);
+          if (readingMode === "rsvp") seekWord(wordIndex + 1);
+          else jumpToNextParagraph();
           break;
         case "ArrowUp":
           e.preventDefault();
-          setWpm((w) => Math.min(900, w + 25));
+          if (readingMode === "rsvp") setWpm((w) => Math.min(900, w + 25));
           break;
         case "ArrowDown":
           e.preventDefault();
-          setWpm((w) => Math.max(100, w - 25));
+          if (readingMode === "rsvp") setWpm((w) => Math.max(100, w - 25));
           break;
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [view, togglePlay, seekWord, wordIndex]);
+  }, [
+    view,
+    readingMode,
+    togglePlay,
+    seekWord,
+    wordIndex,
+    jumpToPrevParagraph,
+    jumpToNextParagraph,
+  ]);
 
   return (
     <div className="mx-auto flex min-h-[calc(100vh-57px)] max-w-3xl flex-col px-4 py-4 sm:px-6">
@@ -310,44 +381,146 @@ export default function Reader({
             </div>
           )}
 
+          <div className="mb-3 flex items-center justify-center gap-2">
+            <button
+              onClick={() => {
+                setReadingMode("paragraph");
+                setPlaying(false);
+              }}
+              className={`rounded-lg px-3 py-1.5 text-sm transition ${
+                readingMode === "paragraph"
+                  ? "bg-[var(--accent-2)] text-white"
+                  : "border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--foreground)]"
+              }`}
+            >
+              Paragraph mode
+            </button>
+            <button
+              onClick={() => setReadingMode("rsvp")}
+              className={`rounded-lg px-3 py-1.5 text-sm transition ${
+                readingMode === "rsvp"
+                  ? "bg-[var(--accent-2)] text-white"
+                  : "border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--foreground)]"
+              }`}
+            >
+              RSVP mode
+            </button>
+          </div>
+
           {/* Reading stage */}
           <div className="flex flex-1 flex-col items-center justify-center gap-8">
-            {totalWords === 0 ? (
+            {readingMode === "rsvp" ? (
+              totalWords === 0 ? (
+                <p className="text-sm text-[var(--muted)]">
+                  This page has no readable text. Try another page.
+                </p>
+              ) : (
+                <>
+                  <div className="paper w-full rounded-2xl border border-[var(--border)] px-4 py-10">
+                    <Rsvp token={currentToken} />
+                  </div>
+                  <ContextLine tokens={tokens} index={wordIndex} />
+                </>
+              )
+            ) : paragraphs.length === 0 ? (
               <p className="text-sm text-[var(--muted)]">
-                This page has no readable text. Try another page.
+                No readable paragraph on this page. Move to another page/chapter.
               </p>
             ) : (
-              <>
-                <div className="paper w-full rounded-2xl border border-[var(--border)] px-4 py-10">
-                  <Rsvp token={currentToken} />
-                </div>
-                <ContextLine tokens={tokens} index={wordIndex} />
-              </>
+              <div className="paper w-full rounded-2xl border border-[var(--border)] px-5 py-6">
+                <p className="mb-3 text-xs text-[var(--muted)]">
+                  Paragraph {paragraphIndex + 1} / {paragraphs.length}
+                </p>
+                <p className="text-base leading-8 text-[var(--foreground)] sm:text-lg">
+                  {currentParagraph}
+                </p>
+              </div>
             )}
           </div>
 
           {/* Controls */}
-          <div className="paper mt-6 rounded-2xl border border-[var(--border)] p-4">
-            <Controls
-              playing={playing}
-              onTogglePlay={togglePlay}
-              wpm={wpm}
-              onWpmChange={setWpm}
-              page={page}
-              numPages={numPages}
-              onPageChange={changePage}
-              wordIndex={wordIndex}
-              totalWords={totalWords}
-              onSeekWord={seekWord}
-              onRestartPage={restartPage}
-              chapters={effectiveChapters}
-              currentChapterIdx={currentChapterIdx}
-              onChapterChange={jumpToChapter}
-            />
-            <p className="mt-3 text-center text-xs text-[var(--muted)]">
-              Space = play/pause · ← → = word · ↑ ↓ = speed
-            </p>
-          </div>
+          {readingMode === "rsvp" ? (
+            <div className="paper mt-6 rounded-2xl border border-[var(--border)] p-4">
+              <Controls
+                playing={playing}
+                onTogglePlay={togglePlay}
+                wpm={wpm}
+                onWpmChange={setWpm}
+                page={page}
+                numPages={numPages}
+                onPageChange={changePage}
+                wordIndex={wordIndex}
+                totalWords={totalWords}
+                onSeekWord={seekWord}
+                onRestartPage={restartPage}
+                chapters={effectiveChapters}
+                currentChapterIdx={currentChapterIdx}
+                onChapterChange={jumpToChapter}
+              />
+              <p className="mt-3 text-center text-xs text-[var(--muted)]">
+                Space = play/pause · ← → = word · ↑ ↓ = speed
+              </p>
+            </div>
+          ) : (
+            <div className="paper mt-6 rounded-2xl border border-[var(--border)] p-4">
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <button
+                  onClick={jumpToPrevParagraph}
+                  className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm transition hover:border-[var(--accent-2)]"
+                >
+                  ‹ Prev paragraph
+                </button>
+                <button
+                  onClick={jumpToNextParagraph}
+                  className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm transition hover:border-[var(--accent-2)]"
+                >
+                  Next paragraph ›
+                </button>
+                <button
+                  onClick={() => setParagraphIndex(0)}
+                  className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm transition hover:border-[var(--accent-2)]"
+                >
+                  Restart paragraph page
+                </button>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {effectiveChapters.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-[var(--muted)]">Chapter</label>
+                    <select
+                      value={currentChapterIdx}
+                      onChange={(e) => jumpToChapter(Number(e.target.value))}
+                      className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-sm outline-none"
+                    >
+                      {effectiveChapters.map((c, i) => (
+                        <option key={`${c.page}-${i}`} value={i}>
+                          {c.title} — p. {c.page + 1}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-[var(--muted)]">Page</label>
+                  <select
+                    value={page}
+                    onChange={(e) => changePage(Number(e.target.value))}
+                    className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-sm outline-none"
+                  >
+                    {Array.from({ length: numPages }, (_, i) => (
+                      <option key={i} value={i}>
+                        {i + 1} / {numPages}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <p className="mt-3 text-center text-xs text-[var(--muted)]">
+                ← → = previous/next paragraph
+              </p>
+            </div>
+          )}
         </>
       )}
     </div>

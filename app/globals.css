@@ -31,6 +31,39 @@
   --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)' opacity='0.028'/%3E%3C/svg%3E");
 }
 
+:root[data-theme="dark"] {
+  --background: #0f1218;
+  --surface: #171c25;
+  --surface-2: #202736;
+  --border: #2c3548;
+  --foreground: #d7deea;
+  --muted: #97a2b8;
+  --accent: #e78984;
+  --accent-2: #7aa2f7;
+}
+
+:root[data-theme="night"] {
+  --background: #080a0f;
+  --surface: #10141d;
+  --surface-2: #161c29;
+  --border: #20283a;
+  --foreground: #cfd7e6;
+  --muted: #8a96ad;
+  --accent: #d88976;
+  --accent-2: #78a7ff;
+}
+
+:root[data-theme="sepia"] {
+  --background: #201b14;
+  --surface: #2a241c;
+  --surface-2: #332c23;
+  --border: #4a3f30;
+  --foreground: #e9ddc6;
+  --muted: #b7a68a;
+  --accent: #d6816f;
+  --accent-2: #c9a56c;
+}
+
 html,
 body {
   max-width: 100vw;

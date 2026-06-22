@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import SignOutButton from "@/components/SignOutButton";
+import ThemeSelector from "@/components/ThemeSelector";
 
 export default async function AppLayout({
   children,
@@ -27,6 +28,7 @@ export default async function AppLayout({
           RSVP Reader
         </Link>
         <div className="flex items-center gap-3">
+          <ThemeSelector />
           <span className="hidden text-xs text-[var(--muted)] sm:inline">
             {user.email}
           </span>
