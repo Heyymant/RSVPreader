@@ -15,6 +15,8 @@ Built with **Next.js + Supabase**, deployable to **Vercel**, using the
 - Context line that keeps the highlighted word centered
 - Upload your own PDFs (text extracted in the browser)
 - Adjustable speed (100-900 wpm), page navigation, seek within a page
+- Two reading modes: RSVP (word-by-word) and Paragraph mode
+- Theme selector: Dark / Night / Sepia
 - Auto-saved reading progress (page, word, speed) per user
 - Private single-account login (Supabase Auth)
 - Keyboard shortcuts: Space (play/pause), Left/Right (word), Up/Down (speed)
@@ -69,8 +71,9 @@ Open http://localhost:3000 and sign in with the account you created.
 
 1. Push this folder to a GitHub repository.
 2. In [Vercel](https://vercel.com), **Add New -> Project** and import the repo.
-3. Add the two environment variables (`NEXT_PUBLIC_SUPABASE_URL` and
-   `NEXT_PUBLIC_SUPABASE_ANON_KEY`) in the project settings.
+3. Add environment variables in project settings:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 4. Deploy. Your reader is now reachable anywhere via the Vercel URL.
 
 > In Supabase, add your Vercel domain under **Authentication -> URL

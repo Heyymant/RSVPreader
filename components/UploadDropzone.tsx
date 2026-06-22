@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { extractPdf } from "@/lib/pdf";
 
-type Status = "idle" | "extracting" | "uploading" | "saving" | "error";
+type Status =
+  | "idle"
+  | "extracting"
+  | "uploading"
+  | "saving"
+  | "error";
 
 export default function UploadDropzone() {
   const router = useRouter();
@@ -90,7 +95,9 @@ export default function UploadDropzone() {
   }
 
   const busy =
-    status === "extracting" || status === "uploading" || status === "saving";
+    status === "extracting" ||
+    status === "uploading" ||
+    status === "saving";
 
   const busyLabel =
     status === "extracting"
@@ -153,3 +160,4 @@ export default function UploadDropzone() {
     </div>
   );
 }
+
